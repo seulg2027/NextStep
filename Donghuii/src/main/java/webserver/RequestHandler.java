@@ -13,6 +13,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
 import lombok.extern.slf4j.Slf4j;
 import model.User;
 import util.IOUtils;
@@ -21,6 +23,7 @@ import util.IOUtils;
 public class RequestHandler extends Thread {
 
     private final Socket connection;
+    private static final Map<String, User> userData = new ConcurrentHashMap<>();
 
     public RequestHandler(Socket connectionSocket) {
         this.connection = connectionSocket;
@@ -61,6 +64,7 @@ public class RequestHandler extends Thread {
                     }
                 }
                 log.debug("Request Header : {}", headers);
+
                 if (requestLine != null) {
                     String[] methodUrl = requestLine.split(" ");
                     String method = methodUrl[0];
@@ -80,13 +84,29 @@ public class RequestHandler extends Thread {
                         } else if(url.startsWith("/user/")) {
                             handleHtmlLogin(url, out);
                         }
-                    } else if (method.equals("POST") && url.equals("/user/create")) {
-                        handlePostUserCreate(buffer, headers, out);
+                    } else if (method.equals("POST")) {
+                        if(url.startsWith("/user/create")) {
+                            handlePostUserCreate(buffer, headers, out);
+                        } else if(url.startsWith("/user/login")) {
+                            handleLoginProcess(buffer, headers, out);
+                        }
                     }
                 }
             } catch (IOException e) {
                 log.error(e.getMessage());
             }
+        }
+
+        private Map<String, String> parseParameter(String body) {
+            Map<String, String> parameters = new HashMap<>();
+            String[] pairs = body.split("&");
+            for (String pair : pairs) {
+                String[] keyValue = pair.split("=");
+                if(keyValue.length == 2) {
+                    parameters.put(keyValue[0], keyValue[1]);
+                }
+            }
+            return parameters;
         }
 
         private void handleIndexRequest(OutputStream out, String filePath) throws IOException {
@@ -114,13 +134,13 @@ public class RequestHandler extends Thread {
                     }
                 }
                 log.debug(param.toString());
-
                 User user = new User();
                 user.setUserId(param.get("userId"));
                 user.setName(param.get("name"));
                 user.setEmail(param.get("email"));
                 user.setPassword(param.get("password"));
-                log.debug(user.toString());
+
+                userData.put(user.getUserId(), user);
 
                 String responseBody = "User created: " + user.getUserId();
                 byte[] body = responseBody.getBytes();
@@ -129,6 +149,8 @@ public class RequestHandler extends Thread {
                 response200Header(dos, body.length);
                 responseBody(dos, body);
             }
+
+            log.debug(userData.toString());
         }
 
         private void handlePostUserCreate(BufferedReader buffer, Map<String, String> headers, OutputStream out) throws IOException {
@@ -150,6 +172,8 @@ public class RequestHandler extends Thread {
             user.setName(param.get("name"));
             user.setEmail(param.get("email"));
             user.setPassword(param.get("password"));
+
+            userData.put(user.getUserId(), user);
 
             DataOutputStream dos = new DataOutputStream(out);
             response302Header(dos, "/login.html");
@@ -174,6 +198,51 @@ public class RequestHandler extends Thread {
                 response404Header(dos, body.length);
                 responseBody(dos, body);
             }
+        }
+
+        private void handleLoginProcess(BufferedReader buffer, Map<String, String> headers, OutputStream out) throws IOException {
+            int contentLength = Integer.parseInt(headers.getOrDefault("Content-Length", "0"));
+
+            char[] bodyChars = new char[contentLength];
+            buffer.read(bodyChars, 0, contentLength);
+            String requestBody = new String(bodyChars);
+
+            Map<String, String> params = parseParameter(requestBody);
+
+            String username = params.get("username");
+            String password = params.get("password");
+
+            if(authenticate(username, password)) {
+                File file = new File("webapp/index.html");
+
+                FileInputStream fis = new FileInputStream(file);
+                byte[] body = fis.readAllBytes();
+                fis.close();
+
+                DataOutputStream dos = new DataOutputStream(out);
+                response200Header(dos, body.length);
+                responseBody(dos, body);
+            } else {
+                File file = new File("webapp/login_failed.html");
+                FileInputStream fis = new FileInputStream(file);
+                byte[] body = fis.readAllBytes();
+                fis.close();
+
+                DataOutputStream dos = new DataOutputStream(out);
+                response200Header(dos, body.length);
+                responseBody(dos, body);
+            }
+        }
+
+        private boolean authenticate(String username, String password) {
+            User user = userData.get(username);
+
+            if(user != null && user.getPassword().equals(password)) {
+                return true;
+            } else {
+                return false;
+            }
+
         }
 
         private void response200Header( DataOutputStream dos, int lengthOfBodyContent) {
