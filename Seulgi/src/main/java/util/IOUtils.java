@@ -17,4 +17,66 @@ public class IOUtils {
         br.read(body, 0, contentLength);
         return String.copyValueOf(body);
     }
+
+    /**
+     * BufferedReader body 찾기
+     * @param br
+     * @return
+     * @throws IOException
+     */
+    public static String bufferGetBody(BufferedReader br) throws IOException {
+        String body = null;
+        int contentLength = 0;
+        String read = null;
+        while ((read = br.readLine()) != null) {
+            if (read != null && read.contains("Content-Length")) {
+                contentLength = Integer.parseInt(bodyData(read));
+            }
+
+            if (read.length() == 0) {
+                body = IOUtils.readData(br, contentLength);
+                break;
+            }
+        }
+        return body;
+    }
+
+    /**
+     * BufferedReader 특정 header 찾기
+     * @param br
+     * @param header
+     * @return
+     * @throws IOException
+     */
+    public static String bufferGetHeader(BufferedReader br, String header) throws IOException {
+        String response = null;
+        String read = null;
+        while ((read = br.readLine()) != null) {
+            if (read != null && read.contains(header)) {
+                response = bodyData(read);
+                break;
+            }
+        }
+        return response;
+    }
+
+    /**
+     * URL 반환
+     * @param line
+     * @return
+     */
+    public static String urlData(String line) {
+        String[] url = line.split(" ");
+        return url[1];
+    }
+
+    /**
+     * key value -> value값 반환
+     * @param line
+     * @return
+     */
+    public static String bodyData(String line) {
+        String[] l = line.replaceAll(" ", "").split(":");
+        return l[1];
+    }
 }
