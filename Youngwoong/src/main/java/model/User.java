@@ -38,11 +38,13 @@ public class User {
         return "User [userId=" + userId + ", password=" + password + ", name=" + name + ", email=" + email + "]";
     }
 
-    public static void create(Map<String, String> user) {
+    public static User create(Map<String, String> user) {
         String userId = user.get("userId");
         String password = user.get("password");
         String name = user.get("name");
         String email = user.get("email");
-        DataBase.addUser(new User(userId, password, name, email));
+        User newUser = new User(userId, password, name, email);
+        DataBase.addUser(newUser);
+        return newUser;
     }
 }
