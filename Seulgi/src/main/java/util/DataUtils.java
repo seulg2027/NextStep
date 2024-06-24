@@ -65,10 +65,8 @@ public class DataUtils {
         String Cookies = IOUtils.bufferGetHeader(br, "Cookie");
         Map<String, String> cookies = HttpRequestUtils.parseCookies(Cookies);
 
-        if (!cookies.isEmpty()) {
-            if ("true".equals(cookies.get("logined"))) {
-                return true;
-            }
+        if (!cookies.isEmpty() && "true".equals(cookies.get("logined"))) {
+            return true;
         }
         return false;
     }

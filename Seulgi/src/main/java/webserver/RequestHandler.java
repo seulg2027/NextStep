@@ -34,20 +34,17 @@ public class RequestHandler extends Thread {
                 // 추가 : POST, GET 구분
                 if (line.startsWith("GET")) {
                     String url = IOUtils.urlData(line);
-                    // HTML 페이지 나타내기
-                    if (line.matches(".*.html.*")) {
+                    String ext = IOUtils.extData(line); // 확장자
+
+                    if (ext.equals("html") || ext.equals("css") || ext.equals("js")) {
                         byte[] body = Files.readAllBytes(new File("./webapp" + url).toPath());
-                        response200Header(dos, body.length);
-                        responseBody(dos, body);
-                    } else if (line.matches(".*.css.*")) {
-                        byte[] body = Files.readAllBytes(new File("./webapp" + url).toPath());
-                        responseCssHeader(dos, body.length);
+                        response200Header(dos, body.length, ext);
                         responseBody(dos, body);
                     } else if (line.matches(".*/user/list.*")) {
                         boolean isAuth = DataUtils.loginAuth(bf);
                         if (isAuth) {
                             byte[] data = DataUtils.getUserAll().getBytes();
-                            response200Header(dos, data.length);
+                            response200Header(dos, data.length, "html");
                             responseBody(dos, data);
                         } else {
                             response302Header(dos, "/user/login.html");
@@ -78,17 +75,17 @@ public class RequestHandler extends Thread {
 
             DataOutputStream dos = new DataOutputStream(out);
             byte[] body = "Hello World".getBytes();
-            response200Header(dos, body.length);
+            response200Header(dos, body.length, HeaderType.HTML.getType());
             responseBody(dos, body);
         } catch (IOException e) {
             log.error(e.getMessage());
         }
     }
 
-    private void response200Header(DataOutputStream dos, int lengthOfBodyContent) {
+    private void response200Header(DataOutputStream dos, int lengthOfBodyContent, String ext) {
         try {
             dos.writeBytes("HTTP/1.1 200 OK \r\n");
-            dos.writeBytes("Content-Type: text/html;charset=utf-8\r\n");
+            dos.writeBytes("Content-Type: " + HeaderType.findBykey(ext).getText() + "charset=utf-8\r\n");
             dos.writeBytes("Content-Length: " + lengthOfBodyContent + "\r\n");
             dos.writeBytes("\r\n");
         } catch (IOException e) {
@@ -113,17 +110,6 @@ public class RequestHandler extends Thread {
             dos.writeBytes("Content-Type: text/html;charset=utf-8\r\n");
             dos.writeBytes("Location: " + url + "\r\n");
             dos.writeBytes("Set-Cookie: logined=" + isLogined + "\r\n");
-            dos.writeBytes("\r\n");
-        } catch (IOException e) {
-            log.error(e.getMessage());
-        }
-    }
-
-    private void responseCssHeader(DataOutputStream dos, int lengthOfBodyContent) {
-        try {
-            dos.writeBytes("HTTP/1.1 200 OK \r\n");
-            dos.writeBytes("Content-Type: text/css;\r\n");
-            dos.writeBytes("Content-Length: " + lengthOfBodyContent + "\r\n");
             dos.writeBytes("\r\n");
         } catch (IOException e) {
             log.error(e.getMessage());

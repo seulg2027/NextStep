@@ -70,6 +70,15 @@ public class IOUtils {
         return url[1];
     }
 
+    public static String extData(String line) {
+        String[] arr = urlData(line).split("[.]");
+        if (arr.length > 1) {
+            return arr[arr.length-1];
+        } else {
+            return "";
+        }
+    }
+
     /**
      * key value -> value값 반환
      * @param line
