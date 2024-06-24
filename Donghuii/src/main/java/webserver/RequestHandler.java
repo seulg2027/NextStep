@@ -1,288 +1,193 @@
 package webserver;
 
-import java.io.BufferedReader;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
+import java.io.*;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import db.DataBase;
 import lombok.extern.slf4j.Slf4j;
 import model.User;
+import util.HttpRequestUtils;
 import util.IOUtils;
 
 @Slf4j
 public class RequestHandler extends Thread {
 
     private final Socket connection;
-    private static final Map<String, User> userData = new ConcurrentHashMap<>();
+    private static final Map<String, String> headerContents = new ConcurrentHashMap<>();
+    private int contentLength;
+    private boolean logined;
+    private String body;
 
     public RequestHandler(Socket connectionSocket) {
         this.connection = connectionSocket;
     }
 
     public void run() {
-        log.debug("New Client Connect! Connected IP : {}, Port : {}", connection.getInetAddress(),
-                connection.getPort());
-            // TODO 사용자 요청에 대한 처리는 이 곳에 구현하면 된다.
-            /**
-             * GET / HTTP/1.1
-             * Host: localhost:8080
-             * Connection: keep-alive
-             * sec-ch-ua: "Google Chrome";v="123", "Not:A-Brand";v="8", "Chromium";v="123"
-             * sec-ch-ua-mobile: ?0
-             * sec-ch-ua-platform: "macOS"
-             * Upgrade-Insecure-Requests: 1
-             * User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36
-             * Sec-Purpose: prefetch;prerender
-             * Purpose: prefetch
-             * Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng;
-             * Cookie:JSESSIONID = 6F ADBCE16B68412F08CD19264E23E66B
-             */
+        log.debug("New Client Connect! Connected IP : {}, Port : {}", connection.getInetAddress(), connection.getPort());
+        try (InputStream in = connection.getInputStream(); OutputStream out = connection.getOutputStream()) {
+            String[] requestLine = parseRequestLine(in);
+            if (requestLine == null) return;
 
-            try (InputStream in = connection.getInputStream(); OutputStream out = connection.getOutputStream()) {
-                BufferedReader buffer = new BufferedReader(new InputStreamReader(in));
-                String readLine;
-                String requestLine = null;
-                Map<String, String> headers = new HashMap<>();
-                while ((readLine = buffer.readLine()) != null && !readLine.isEmpty()) {
-                    if (requestLine == null) {
-                        requestLine = readLine;
-                    } else {
-                        String[] header = readLine.split(": ");
-                        if (header.length == 2) {
-                            headers.put(header[0], header[1]);
-                        }
-                    }
-                }
-                log.debug("Request Header : {}", headers);
+            String method = requestLine[0];
+            String url = requestLine[1];
 
-                if (requestLine != null) {
-                    String[] methodUrl = requestLine.split(" ");
-                    String method = methodUrl[0];
-                    String url = methodUrl[1];
-
-                    if (method.equals("GET")) {
-                        if (url.equals("/")) {
-                            DataOutputStream dos = new DataOutputStream(out);
-                            byte[] body = "Hello World".getBytes();
-                            response200Header(dos, body.length);
-                            responseBody(dos, body);
-                        } else if (url.equals("/index.html")) {
-                            handleIndexRequest(out, "/index.html");
-                        } else if (url.startsWith("/user/create")) {
-                            int contentLength = headers.size();
-                            handleGetUserCreate(url, contentLength, out);
-                        } else if(url.startsWith("/user/")) {
-                            handleHtmlLogin(url, out);
-                        }
-                    } else if (method.equals("POST")) {
-                        if(url.startsWith("/user/create")) {
-                            handlePostUserCreate(buffer, headers, out);
-                        } else if(url.startsWith("/user/login")) {
-                            handleLoginProcess(buffer, headers, out);
-                        }
-                    }
-                }
-            } catch (IOException e) {
-                log.error(e.getMessage());
+            if (url.endsWith(".css")) {
+                cssProcess(out, url);
             }
-        }
-
-        private Map<String, String> parseParameter(String body) {
-            Map<String, String> parameters = new HashMap<>();
-            String[] pairs = body.split("&");
-            for (String pair : pairs) {
-                String[] keyValue = pair.split("=");
-                if(keyValue.length == 2) {
-                    parameters.put(keyValue[0], keyValue[1]);
+            if (method.equals("GET")) {
+                if (url.startsWith("/user/create")) {
+                    registerGetProcess(url, out);
+                } else {
+                    responseResource(out, url);
                 }
-            }
-            return parameters;
-        }
-
-        private void handleIndexRequest(OutputStream out, String filePath) throws IOException {
-            String indexPath = "/Users/proxy/Next-Step/webapp" + filePath;
-            File file = new File(indexPath);
-            if (file.exists()) {
-                Path path = file.toPath();
-                byte[] bytes = Files.readAllBytes(path);
-                DataOutputStream dos = new DataOutputStream(out);
-                response200Header(dos, bytes.length);
-                responseBody(dos, bytes);
-            }
-        }
-
-        private void handleGetUserCreate(String url, int contentLength, OutputStream out) throws IOException {
-            String[] urlSplit = url.split("\\?");
-            if (urlSplit.length > 1) {
-                String[] params = urlSplit[1].split("&");
-
-                Map<String, String> param = new HashMap<>();
-                for (String str : params) {
-                    String[] keyValue = str.split("=");
-                    if (keyValue.length == 2) {
-                        param.put(keyValue[0], keyValue[1]);
-                    }
+            } else if (method.equals("POST")) {
+                if (url.equals("/user/create")) {
+                    registerPostProcess(out);
+                } else if (url.equals("/user/login")) {
+                    loginProcess(out);
                 }
-                log.debug(param.toString());
-                User user = new User();
-                user.setUserId(param.get("userId"));
-                user.setName(param.get("name"));
-                user.setEmail(param.get("email"));
-                user.setPassword(param.get("password"));
-
-                userData.put(user.getUserId(), user);
-
-                String responseBody = "User created: " + user.getUserId();
-                byte[] body = responseBody.getBytes();
-
-                DataOutputStream dos = new DataOutputStream(out);
-                response200Header(dos, body.length);
-                responseBody(dos, body);
-            }
-
-            log.debug(userData.toString());
-        }
-
-        private void handlePostUserCreate(BufferedReader buffer, Map<String, String> headers, OutputStream out) throws IOException {
-            int contentLength = Integer.parseInt(headers.get("Content-Length"));
-            String body = IOUtils.readData(buffer, contentLength);
-
-            Map<String, String> param = new HashMap<>();
-            String[] pairs = body.split("&");
-            for (String pair : pairs) {
-                String[] keyValue = pair.split("=");
-                if (keyValue.length == 2) {
-                    param.put(keyValue[0], keyValue[1]);
-                }
-            }
-            log.debug(param.toString());
-
-            User user = new User();
-            user.setUserId(param.get("userId"));
-            user.setName(param.get("name"));
-            user.setEmail(param.get("email"));
-            user.setPassword(param.get("password"));
-
-            userData.put(user.getUserId(), user);
-
-            DataOutputStream dos = new DataOutputStream(out);
-            response302Header(dos, "/login.html");
-        }
-
-        private void handleHtmlLogin(String url, OutputStream out) throws IOException {
-            String webappPath = "webapp" + url;
-
-            File file = new File(webappPath);
-
-            if(file.exists() && file.isFile()) {
-                FileInputStream fis = new FileInputStream(file);
-                byte[] body = fis.readAllBytes();
-                fis.close();
-
-                DataOutputStream dos = new DataOutputStream(out);
-                response200Header(dos, body.length);
-                responseBody(dos, body);
             } else {
-                DataOutputStream dos = new DataOutputStream(out);
-                byte[] body = "404 Not Found".getBytes();
-                response404Header(dos, body.length);
-                responseBody(dos, body);
+                responseResource(out, url);
+            }
+        } catch (IOException e) {
+            log.error(e.getMessage());
+        }
+    }
+
+    private String[] parseRequestLine(InputStream in) throws IOException {
+        BufferedReader buffer = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));
+        String requestLine = buffer.readLine();
+        if (requestLine == null) {
+            return null;
+        }
+
+        String[] tokens = requestLine.split(" ");
+        String line;
+        while (!(line = buffer.readLine()).isEmpty()) {
+            if (line.contains("Content-Length")) {
+                contentLength = getContentLength(line);
+            }
+            if (line.contains("Cookie")) {
+                logined = isLogin(line);
             }
         }
 
-        private void handleLoginProcess(BufferedReader buffer, Map<String, String> headers, OutputStream out) throws IOException {
-            int contentLength = Integer.parseInt(headers.getOrDefault("Content-Length", "0"));
-
-            char[] bodyChars = new char[contentLength];
-            buffer.read(bodyChars, 0, contentLength);
-            String requestBody = new String(bodyChars);
-
-            Map<String, String> params = parseParameter(requestBody);
-
-            String username = params.get("username");
-            String password = params.get("password");
-
-            if(authenticate(username, password)) {
-                File file = new File("webapp/index.html");
-
-                FileInputStream fis = new FileInputStream(file);
-                byte[] body = fis.readAllBytes();
-                fis.close();
-
-                DataOutputStream dos = new DataOutputStream(out);
-                response200Header(dos, body.length);
-                responseBody(dos, body);
-            } else {
-                File file = new File("webapp/login_failed.html");
-                FileInputStream fis = new FileInputStream(file);
-                byte[] body = fis.readAllBytes();
-                fis.close();
-
-                DataOutputStream dos = new DataOutputStream(out);
-                response200Header(dos, body.length);
-                responseBody(dos, body);
-            }
+        if (tokens[0].equals("POST")) {
+            body = IOUtils.readData(buffer, contentLength);
         }
 
-        private boolean authenticate(String username, String password) {
-            User user = userData.get(username);
+        return tokens;
+    }
 
-            if(user != null && user.getPassword().equals(password)) {
-                return true;
-            } else {
-                return false;
-            }
+    private int getContentLength(String line) {
+        String[] headerTokens = line.split(":");
+        return Integer.parseInt(headerTokens[1].trim());
+    }
 
+    private void addUser(String data) {
+        Map<String, String> params = HttpRequestUtils.parseQueryString(data);
+        User user = new User(params.get("userId"), params.get("password"), params.get("name"), params.get("email"));
+        DataBase.addUser(user);
+        log.debug("User : {}", user);
+    }
+
+    private void registerGetProcess(String url, OutputStream out) {
+        int index = url.indexOf("?");
+        String queryString = url.substring(index + 1);
+        addUser(queryString);
+        response302RegisterSuccessHeader(new DataOutputStream(out));
+    }
+
+    private void registerPostProcess(OutputStream out) {
+        addUser(body);
+        response302RegisterSuccessHeader(new DataOutputStream(out));
+    }
+
+    private void loginProcess(OutputStream out) throws IOException {
+        Map<String, String> params = HttpRequestUtils.parseQueryString(body);
+        User userInfo = DataBase.findUserById(params.get("userId"));
+
+        if (userInfo == null || !userInfo.getPassword().equals(params.get("password"))) {
+            responseResource(out, "/user/login_failed.html");
+        } else {
+            response302LoginSuccessHeader(new DataOutputStream(out));
         }
+    }
 
-        private void response200Header( DataOutputStream dos, int lengthOfBodyContent) {
-            try {
-                dos.writeBytes("HTTP/1.1 200 OK \r\n");
-                dos.writeBytes("Content-Type: text/html;charset=utf-8\r\n");
-                dos.writeBytes("Content-Length: " + lengthOfBodyContent + "\r\n");
-                dos.writeBytes("\r\n");
-            } catch (IOException e) {
-                log.error(e.getMessage());
-            }
-        }
+    private void cssProcess(OutputStream out, String url) throws IOException {
+        DataOutputStream dos = new DataOutputStream(out);
+        byte[] body = Files.readAllBytes(new File("./webapp" + url).toPath());
+        response200CssHeader(dos, body.length);
+        responseBody(dos, body);
+    }
 
-        private void response302Header(DataOutputStream dos, String location) {
-            try {
-                dos.writeBytes("HTTP/1.1 302 FOUND \r\n");
-                dos.writeBytes("Content-Type: text/html; charset=utf-8\r\n");
-                dos.writeBytes("Location: " + location + "\r\n");
-            } catch (IOException e) {
-                log.error(e.getMessage());
-            }
+    private void response302RegisterSuccessHeader(DataOutputStream dos) {
+        try {
+            dos.writeBytes("HTTP/1.1 302 Redirect OK\r\n");
+            dos.writeBytes("Location: /index.html \r\n");
+            dos.writeBytes("\r\n");
+        } catch (IOException e) {
+            log.error(e.getMessage());
         }
+    }
 
-        private void response404Header(DataOutputStream dos, int contentLength) throws IOException {
-            try {
-                dos.writeBytes("HTTP/1.1 404 Not Found\r\n");
-                dos.writeBytes("Content-Type: text/html; charset=utf-8\r\n");
-                dos.writeBytes("Content-Length: " + contentLength + "\r\n");
-                dos.writeBytes("\r\n");
-            } catch (IOException e) {
-                log.error(e.getMessage());
-            }
+    private void response302LoginSuccessHeader(DataOutputStream dos) throws IOException {
+        try {
+            dos.writeBytes("HTTP/1.1 302 Redirect OK\r\n");
+            dos.writeBytes("Set-Cookie: logined=true \r\n");
+            dos.writeBytes("Location: /index.html \r\n");
+            dos.writeBytes("\r\n");
+        } catch (IOException e) {
+            log.error(e.getMessage());
         }
+    }
 
-        private void responseBody(DataOutputStream dos, byte[] body) {
-            try {
-                dos.write(body, 0, body.length);
-                dos.flush();
-            } catch (IOException e) {
-                log.error(e.getMessage());
-            }
+    private void response200CssHeader(DataOutputStream dos, int length) {
+        try {
+            dos.writeBytes("HTTP/1.1 200 OK \r\n");
+            dos.writeBytes("Content-Type: text/css\r\n");
+            dos.writeBytes("Content-Length: " + length + "\r\n");
+            dos.writeBytes("\r\n");
+        } catch (IOException e) {
+            log.error(e.getMessage());
         }
+    }
+
+    private boolean isLogin(String line) {
+        String[] headerTokens = line.split(":");
+        Map<String, String> cookies = HttpRequestUtils.parseCookies(headerTokens[1].trim());
+        String value = cookies.get("logined");
+        return value != null && Boolean.parseBoolean(value);
+    }
+
+    private void responseResource(OutputStream out, String url) throws IOException {
+        DataOutputStream dos = new DataOutputStream(out);
+        byte[] body = Files.readAllBytes(new File("./webapp" + url).toPath());
+        response200Header(dos, body.length);
+        responseBody(dos, body);
+    }
+
+    private void response200Header(DataOutputStream dos, int lengthOfBodyContent) {
+        try {
+            dos.writeBytes("HTTP/1.1 200 OK \r\n");
+            dos.writeBytes("Content-Type: text/html;charset=utf-8\r\n");
+            dos.writeBytes("Content-Length: " + lengthOfBodyContent + "\r\n");
+            dos.writeBytes("\r\n");
+        } catch (IOException e) {
+            log.error(e.getMessage());
+        }
+    }
+
+    private void responseBody(DataOutputStream dos, byte[] body) {
+        try {
+            dos.write(body, 0, body.length);
+            dos.flush();
+        } catch (IOException e) {
+            log.error(e.getMessage());
+        }
+    }
 }
