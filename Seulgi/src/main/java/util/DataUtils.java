@@ -7,7 +7,10 @@ import org.slf4j.LoggerFactory;
 import webserver.RequestHandler;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.IOException;
+import java.net.URLDecoder;
+import java.nio.file.Files;
 import java.util.Collection;
 import java.util.Map;
 
@@ -16,39 +19,26 @@ public class DataUtils {
 
     /**
      * User 모델 생성
-     * @param br
+     * @param body
      * @return User
      */
-    public static void createUser(BufferedReader br) throws IOException {
-        String body = IOUtils.bufferGetBody(br);
-        log.debug("request : {}", body);
-
-        String[] userArr = body.split("&");
-        String userId = userArr[0].split("=")[1];
-        String password = userArr[1].split("=")[1];
-        String name = userArr[2].split("=")[1];
-        String email = userArr[3].split("=")[1];
-
-        User user = new User(userId, password, name, email);
+    public static void createUser(String body) throws IOException {
+        Map<String, String> query = HttpRequestUtils.parseQueryString(body);
+        User user = new User(query.get("userId"), query.get("password"), query.get("name"), query.get("email"));
 
         DataBase.addUser(user);
     }
 
     /**
      * User 로그인
-     * @param br
+     * @param body
      * @return Integer
      */
-    public static Integer loginUser(BufferedReader br) throws IOException {
-        String body = IOUtils.bufferGetBody(br);
-
-        String[] userArr = body.split("&");
-        String userId = userArr[0].split("=")[1];
-        String password = userArr[1].split("=")[1];
-
-        User user = DataBase.findUserById(userId);
+    public static Integer loginUser(String body) throws IOException {
+        Map<String, String> query = HttpRequestUtils.parseQueryString(body);
+        User user = DataBase.findUserById(query.get("userId"));
         if (user != null) {
-            if (password.equals(user.getPassword())) {
+            if (query.get("password").equals(user.getPassword())) {
                 return 1;
             }
             return -2;
@@ -75,15 +65,24 @@ public class DataUtils {
      * 모든 User 출력하기
      * @return
      */
-    public static String getUserAll() {
-        StringBuilder userStr = new StringBuilder("user list ! 🐳").append("\n");
+    public static String getUserAll() throws IOException{
+        StringBuilder userStr = new StringBuilder("<center><h3> user list ! 🐳 </h3></center>").append("\n");
         Collection<User> allUsers = DataBase.findAll();
+        String body = new String(Files.readAllBytes(new File("./webapp/user/list.html").toPath()));
+
+        int idx = 0;
 
         for (User user : allUsers) {
-            userStr.append("user name : " + user.getName());
-            userStr.append("user email : " + user.getEmail());
-            userStr.append("\n ----------------");
+            idx++;
+            userStr.append("<tr>");
+            userStr.append("<th scope=\"row\">" + idx + "</th>" +
+                    "<td>" + user.getUserId() + "</td>" +
+                    "<td>" + user.getName() + "</td>" +
+                    "<td>" + user.getEmail() + "</td>" +
+                    "<td><a href=\"#\" class=\"btn btn-success\" role=\"button\">수정</a></td>\n");
+            userStr.append("</tr>");
         }
-        return String.valueOf(userStr);
+
+        return body.replace("<%userList%>", URLDecoder.decode(String.valueOf(userStr), "UTF-8"));
     }
 }

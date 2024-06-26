@@ -27,53 +27,58 @@ public class RequestHandler extends Thread {
 
         try (InputStream in = connection.getInputStream(); OutputStream out = connection.getOutputStream()) {
             BufferedReader bf = new BufferedReader(new InputStreamReader(in, "euc-kr"));
+            DataOutputStream dos = new DataOutputStream(out);
             String line = bf.readLine();
+            String status = "";
+            String url = "";
+            String ext = "";
 
             if (!"".equals(line) && line != null) {
-                DataOutputStream dos = new DataOutputStream(out);
-                // 추가 : POST, GET 구분
-                if (line.startsWith("GET")) {
-                    String url = IOUtils.urlData(line);
-                    String ext = IOUtils.extData(line); // 확장자
+                status = IOUtils.urlData(line)[0];
+                url = IOUtils.urlData(line)[1];
+                ext = IOUtils.extData(url);
+            }
 
-                    if (ext.equals("html") || ext.equals("css") || ext.equals("js")) {
-                        byte[] body = Files.readAllBytes(new File("./webapp" + url).toPath());
-                        response200Header(dos, body.length, ext);
-                        responseBody(dos, body);
-                    } else if (line.matches(".*/user/list.*")) {
-                        boolean isAuth = DataUtils.loginAuth(bf);
-                        if (isAuth) {
-                            byte[] data = DataUtils.getUserAll().getBytes();
-                            response200Header(dos, data.length, "html");
-                            responseBody(dos, data);
-                        } else {
-                            response302Header(dos, "/user/login.html");
-                        }
+            // 추가 : POST, GET 구분
+            if ("GET".equals(status)) {
+                if (line.matches(".*/user/list.*")) {
+                    boolean isAuth = DataUtils.loginAuth(bf);
+                    if (isAuth) {
+                        byte[] data = DataUtils.getUserAll().getBytes();
+                        response200Header(dos, data.length, "html");
+                        responseBody(dos, data);
+                    } else {
+                        response302Header(dos, "/user/login.html");
                     }
-                } else if (line.startsWith("POST")) {
-                    // create user
-                    if (line.matches(".*/user/create.*")) {
-                        DataUtils.createUser(bf);
-                        response302Header(dos, "/index.html");
-                        // login user
-                    } else if (line.matches(".*/user/login.*")) {
-                        boolean setCookie;
-                        String redirectUrl = "";
-                        int result = DataUtils.loginUser(bf);
+                }
 
-                        if (result == 1) {
-                            redirectUrl = "/index.html";
-                            setCookie = true;
-                        } else {
-                            redirectUrl = "/user/login_failed.html";
-                            setCookie = false;
-                        }
-                        response302Header(dos, redirectUrl, setCookie);
+                if (ext.equals("html") || ext.equals("css") || ext.equals("js") || ext.equals("ico") || ext.equals("ttf")) {
+                    byte[] body = Files.readAllBytes(new File("./webapp" + url).toPath());
+                    response200Header(dos, body.length, ext);
+                    responseBody(dos, body);
+                }
+            } else if ("POST".equals(status)) {
+                // create user
+                if (line.matches(".*/user/create.*")) {
+                    DataUtils.createUser(IOUtils.bufferGetBody(bf));
+                    response302Header(dos, "/index.html");
+                    // login user
+                } else if (line.matches(".*/user/login.*")) {
+                    boolean setCookie;
+                    String redirectUrl = "";
+                    int result = DataUtils.loginUser(IOUtils.bufferGetBody(bf));
+
+                    if (result == 1) {
+                        redirectUrl = "/index.html";
+                        setCookie = true;
+                    } else {
+                        redirectUrl = "/user/login_failed.html";
+                        setCookie = false;
                     }
+                    response302Header(dos, redirectUrl, setCookie);
                 }
             }
 
-            DataOutputStream dos = new DataOutputStream(out);
             byte[] body = "Hello World".getBytes();
             response200Header(dos, body.length, HeaderType.HTML.getType());
             responseBody(dos, body);

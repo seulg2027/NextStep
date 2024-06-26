@@ -8,6 +8,8 @@ public enum HeaderType {
     CSS("css", "text/css;"),
     JSON("json", "application/json;"),
     JAVASCRIPT("js", "text/javascript;"),
+    ICO("ico", "image/png"),
+    TTF("ttf", "font/ttf"),
     STATUS_200("200", "200 OK"),
     STATUS_302("302", "302 Found");
 

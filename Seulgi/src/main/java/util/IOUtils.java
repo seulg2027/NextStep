@@ -65,13 +65,13 @@ public class IOUtils {
      * @param line
      * @return
      */
-    public static String urlData(String line) {
+    public static String[] urlData(String line) {
         String[] url = line.split(" ");
-        return url[1];
+        return url;
     }
 
-    public static String extData(String line) {
-        String[] arr = urlData(line).split("[.]");
+    public static String extData(String url) {
+        String[] arr = url.split("[.]");
         if (arr.length > 1) {
             return arr[arr.length-1];
         } else {

@@ -4,7 +4,7 @@ import java.util.Arrays;
 import java.util.List;
 
 public enum HeaderTypeGroup {
-    CONTENT("Content-Type", Arrays.asList(HeaderType.HTML, HeaderType.CSS, HeaderType.JSON, HeaderType.JAVASCRIPT)),
+    CONTENT("Content-Type", Arrays.asList(HeaderType.HTML, HeaderType.CSS, HeaderType.JSON, HeaderType.JAVASCRIPT, HeaderType.ICO, HeaderType.TTF)),
     STATUS("status", Arrays.asList(HeaderType.STATUS_200, HeaderType.STATUS_302));
 
     private String key;
