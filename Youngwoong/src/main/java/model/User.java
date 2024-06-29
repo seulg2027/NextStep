@@ -1,9 +1,5 @@
 package model;
 
-import java.util.Map;
-
-import db.DataBase;
-
 public class User {
     private String userId;
     private String password;
@@ -33,18 +29,12 @@ public class User {
         return email;
     }
 
+    public boolean login(String password) {
+        return this.password.equals(password);
+    }
+
     @Override
     public String toString() {
         return "User [userId=" + userId + ", password=" + password + ", name=" + name + ", email=" + email + "]";
-    }
-
-    public static User create(Map<String, String> user) {
-        String userId = user.get("userId");
-        String password = user.get("password");
-        String name = user.get("name");
-        String email = user.get("email");
-        User newUser = new User(userId, password, name, email);
-        DataBase.addUser(newUser);
-        return newUser;
     }
 }
