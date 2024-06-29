@@ -53,10 +53,12 @@ public class DataUtils {
      */
     public static Boolean loginAuth(BufferedReader br) throws IOException {
         String Cookies = IOUtils.bufferGetHeader(br, "Cookie");
-        Map<String, String> cookies = HttpRequestUtils.parseCookies(Cookies);
+        if (Cookies != null && !"".equals(Cookies)) {
+            Map<String, String> cookies = HttpRequestUtils.parseCookies(Cookies);
 
-        if (!cookies.isEmpty() && "true".equals(cookies.get("logined"))) {
-            return true;
+            if (!cookies.isEmpty() && "true".equals(cookies.get("logined"))) {
+                return true;
+            }
         }
         return false;
     }

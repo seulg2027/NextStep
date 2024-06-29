@@ -27,11 +27,12 @@ public class RequestHandler extends Thread {
 
         try (InputStream in = connection.getInputStream(); OutputStream out = connection.getOutputStream()) {
             BufferedReader bf = new BufferedReader(new InputStreamReader(in, "euc-kr"));
-            DataOutputStream dos = new DataOutputStream(out);
+            HttpResponse httpResponse = new HttpResponse(out);
             String line = bf.readLine();
             String status = "";
             String url = "";
             String ext = "";
+            boolean isAuth;
 
             if (!"".equals(line) && line != null) {
                 status = IOUtils.urlData(line)[0];
@@ -41,92 +42,42 @@ public class RequestHandler extends Thread {
 
             // 추가 : POST, GET 구분
             if ("GET".equals(status)) {
-                if (line.matches(".*/user/list.*")) {
-                    boolean isAuth = DataUtils.loginAuth(bf);
+                if ("/user/list.html".equals(url)) {
+                    isAuth = DataUtils.loginAuth(bf);
                     if (isAuth) {
                         byte[] data = DataUtils.getUserAll().getBytes();
-                        response200Header(dos, data.length, "html");
-                        responseBody(dos, data);
+                        httpResponse.response200Header(data.length, "html");
+                        httpResponse.responseBody(data);
                     } else {
-                        response302Header(dos, "/user/login.html");
+                        httpResponse.sendRedirect("/user/login.html");
                     }
+                } else if (ext.equals("html") || ext.equals("css") || ext.equals("js") || ext.equals("ico") || ext.equals("ttf")) {
+                    httpResponse.responseUrlResource(url, ext);
                 }
-
-                if (ext.equals("html") || ext.equals("css") || ext.equals("js") || ext.equals("ico") || ext.equals("ttf")) {
-                    byte[] body = Files.readAllBytes(new File("./webapp" + url).toPath());
-                    response200Header(dos, body.length, ext);
-                    responseBody(dos, body);
-                }
-            } else if ("POST".equals(status)) {
-                // create user
-                if (line.matches(".*/user/create.*")) {
+            }
+            else if ("POST".equals(status)) {
+                if ("/user/create".equals(url)) { // create user
                     DataUtils.createUser(IOUtils.bufferGetBody(bf));
-                    response302Header(dos, "/index.html");
-                    // login user
-                } else if (line.matches(".*/user/login.*")) {
-                    boolean setCookie;
+                    httpResponse.sendRedirect("/index.html");
+                } else if ("/user/login".equals(url)) { // login
                     String redirectUrl = "";
                     int result = DataUtils.loginUser(IOUtils.bufferGetBody(bf));
 
                     if (result == 1) {
                         redirectUrl = "/index.html";
-                        setCookie = true;
+                        httpResponse.addResponseHeader("Cookie", String.valueOf(true));
                     } else {
                         redirectUrl = "/user/login_failed.html";
-                        setCookie = false;
+                        httpResponse.addResponseHeader("Cookie", String.valueOf(false));
                     }
-                    response302Header(dos, redirectUrl, setCookie);
+                    httpResponse.sendRedirect(redirectUrl);
                 }
             }
 
-            byte[] body = "Hello World".getBytes();
-            response200Header(dos, body.length, HeaderType.HTML.getType());
-            responseBody(dos, body);
+            httpResponse.responseUrlResource("/index.html", HeaderType.HTML.getType());
         } catch (IOException e) {
             log.error(e.getMessage());
         }
     }
 
-    private void response200Header(DataOutputStream dos, int lengthOfBodyContent, String ext) {
-        try {
-            dos.writeBytes("HTTP/1.1 200 OK \r\n");
-            dos.writeBytes("Content-Type: " + HeaderType.findBykey(ext).getText() + "charset=utf-8\r\n");
-            dos.writeBytes("Content-Length: " + lengthOfBodyContent + "\r\n");
-            dos.writeBytes("\r\n");
-        } catch (IOException e) {
-            log.error(e.getMessage());
-        }
-    }
-
-    private void response302Header(DataOutputStream dos, String url) {
-        try {
-            dos.writeBytes("HTTP/1.1 302 Found \r\n");
-            dos.writeBytes("Content-Type: text/html;charset=utf-8\r\n");
-            dos.writeBytes("Location: " + url + "\r\n");
-            dos.writeBytes("\r\n");
-        } catch (IOException e) {
-            log.error(e.getMessage());
-        }
-    }
-
-    private void response302Header(DataOutputStream dos, String url, boolean isLogined) {
-        try {
-            dos.writeBytes("HTTP/1.1 302 Found \r\n");
-            dos.writeBytes("Content-Type: text/html;charset=utf-8\r\n");
-            dos.writeBytes("Location: " + url + "\r\n");
-            dos.writeBytes("Set-Cookie: logined=" + isLogined + "\r\n");
-            dos.writeBytes("\r\n");
-        } catch (IOException e) {
-            log.error(e.getMessage());
-        }
-    }
-
-    private void responseBody(DataOutputStream dos, byte[] body) {
-        try {
-            dos.write(body, 0, body.length);
-            dos.flush();
-        } catch (IOException e) {
-            log.error(e.getMessage());
-        }
-    }
 }
