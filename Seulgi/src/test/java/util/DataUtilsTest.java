@@ -24,7 +24,7 @@ public class DataUtilsTest {
         String body = "Content-Length: 50\n\nuserId=kk&password=kk&name=kk&email=kk%40naver.com";
         BufferedReader br = new BufferedReader(new InputStreamReader(new ByteArrayInputStream(body.getBytes())));
 
-        DataUtils.createUser(br);
+        DataUtils.createUser(IOUtils.bufferGetBody(br));
         assertThat(DataBase.findUserById("kk").getUserId(), is("kk"));
         assertThat(DataBase.findUserById("kk").getName(), is("kk"));
         assertThat(DataBase.findUserById("kk").getPassword(), is("kk"));
@@ -38,8 +38,8 @@ public class DataUtilsTest {
         BufferedReader br1 = new BufferedReader(new InputStreamReader(new ByteArrayInputStream(body1.getBytes())));
         BufferedReader br2 = new BufferedReader(new InputStreamReader(new ByteArrayInputStream(body2.getBytes())));
 
-        assertThat(DataUtils.loginUser(br1), is(1)); // 로그인 성공 (회원가입한 사용자)
-        assertThat(DataUtils.loginUser(br2), is(-1)); // 로그인 실패 (회원에 없는 사용자)
+        assertThat(DataUtils.loginUser(IOUtils.bufferGetBody(br1)), is(1)); // 로그인 성공 (회원가입한 사용자)
+        assertThat(DataUtils.loginUser(IOUtils.bufferGetBody(br2)), is(-1)); // 로그인 실패 (회원에 없는 사용자)
     }
 
     @Test
@@ -51,7 +51,7 @@ public class DataUtilsTest {
     }
 
     @Test
-    public void getUserAll() {
+    public void getUserAll() throws IOException{
         String result = DataUtils.getUserAll();
 
         assertThat(result, is("user list ! 🐳\nuser name : kkuser email : kk%40naver.com\n ----------------"));
